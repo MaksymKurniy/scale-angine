@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    name: Type-check & build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Smoke test (Nest bootstrap + URI parser)
+        run: |
+          node -e "
+            const { SftpService } = require('./dist/main/nest/sftp/sftp.service.js');
+            const cases = [
+              'sftp://alice:secret@example.com:22',
+              'sftp://abc123:Px9/dGh+kLm=@host:22',
+              'sftp://abc123:p@ssword@host:22',
+            ];
+            let failed = 0;
+            for (const c of cases) {
+              try {
+                const o = SftpService.parseUri(c);
+                if (!o.host || !o.password) throw new Error('missing parts');
+                console.log('OK ', c, '->', o.host, o.port, o.username);
+              } catch (e) {
+                console.error('FAIL', c, e.message);
+                failed++;
+              }
+            }
+            process.exit(failed ? 1 : 0);
+          "

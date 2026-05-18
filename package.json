@@ -1,0 +1,90 @@
+{
+  "name": "scale-angine",
+  "version": "1.0.0",
+  "description": "Scale Angine — proxy gateway between Mettler Toledo scales and SFTP server for XML receipts and product files.",
+  "main": "dist/main/main.js",
+  "author": {
+    "name": "Mykhailo",
+    "email": "misha.s@team.base-xtech.com"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "clean": "rimraf dist",
+    "build:main": "tsc -p tsconfig.main.json",
+    "copy:renderer": "node scripts/copy-renderer.js",
+    "build": "npm run clean && npm run build:main && npm run copy:renderer",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron . --enable-logging",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:all": "npm run build && electron-builder -mw"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.3.10",
+    "@nestjs/core": "^10.3.10",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "ssh2-sftp-client": "^10.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/ssh2-sftp-client": "^9.0.4",
+    "electron": "^31.2.1",
+    "electron-builder": "^24.13.3",
+    "rimraf": "^5.0.7",
+    "typescript": "^5.5.3"
+  },
+  "build": {
+    "appId": "com.basex.scale-angine",
+    "productName": "Scale Angine",
+    "copyright": "Copyright © 2026 Base-X Tech",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{map,ts}",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS}"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Scale-Angine-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Scale Angine"
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64"]
+        }
+      ],
+      "artifactName": "Scale-Angine-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Utility"
+    }
+  }
+}

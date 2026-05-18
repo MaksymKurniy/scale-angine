@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+    <title>Scale Angine</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__status">
+        <span class="status-dot status-dot--idle" id="status-dot"></span>
+        <span id="status-text">Idle</span>
+      </header>
+
+      <section class="section">
+        <h2>SFTP Connection</h2>
+        <label class="field">
+          <span class="field__label">SFTP URL (e.g. sftp://user@host:22 — password can go in the field below)</span>
+          <input id="sftpUri" type="text" placeholder="sftp://user@host:22" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span class="field__label">SFTP Password (optional — overrides any password inside the URL)</span>
+          <div class="field__row">
+            <input id="sftpPassword" type="password" placeholder="Paste password from SFTP To Go here" autocomplete="off" spellcheck="false" />
+            <button type="button" id="btn-show-password" class="btn-folder" title="Show / hide password">👁</button>
+          </div>
+        </label>
+      </section>
+
+      <section class="section">
+        <h2>SFTP Folder</h2>
+        <label class="field">
+          <span class="field__label">Name of the folder on cloud SFTP (e.g. DIsaH6)</span>
+          <input id="folderName" type="text" placeholder="DIsaH6" autocomplete="off" />
+        </label>
+      </section>
+
+      <section class="section">
+        <h2>Local directories</h2>
+        <label class="field">
+          <span class="field__label">Import directory (received)</span>
+          <div class="field__row">
+            <input id="importDirectory" type="text" placeholder="C:\\scales\\import" autocomplete="off" />
+            <button type="button" class="btn-folder" data-target="importDirectory" title="Choose folder">📁</button>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field__label">Export directory (sent from)</span>
+          <div class="field__row">
+            <input id="exportDirectory" type="text" placeholder="C:\\scales\\export" autocomplete="off" />
+            <button type="button" class="btn-folder" data-target="exportDirectory" title="Choose folder">📁</button>
+          </div>
+        </label>
+      </section>
+
+      <section class="actions">
+        <button id="btn-start" class="btn btn--primary">▶ Start</button>
+        <button id="btn-save" class="btn">💾 Save</button>
+        <button id="btn-stop" class="btn btn--danger">■ Stop</button>
+      </section>
+
+      <section class="section section--logs">
+        <h2>Activity</h2>
+        <div id="logs" class="logs" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
