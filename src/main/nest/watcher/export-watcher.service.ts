@@ -13,6 +13,13 @@ const STABLE_MS = 1500; // Skip files whose mtime is newer than this (scale may 
 // SFTP root, which is unrelated.
 const REMOTE_TARGET_DIR = '/upload/import';
 const LOCAL_PROCESSED_SUBDIR = 'processed';
+// Hard cap on how long a single tick may run. Even a big upload should
+// finish well within this. Anything longer is a zombie tick and we
+// unwind so the next tick can attempt again.
+const TICK_TIMEOUT_MS = 90_000;
+// If a tick doesn't complete successfully for this long, log a WARN so the
+// operator sees "something is wrong" instead of "log went quiet".
+const STALE_TICK_WARN_MS = 5 * 60_000;
 
 /**
  * Watches the LOCAL Export directory (where Mettler Toledo drops weighed-product
@@ -27,8 +34,17 @@ const LOCAL_PROCESSED_SUBDIR = 'processed';
 @Injectable()
 export class ExportWatcherService {
   private timer: NodeJS.Timeout | null = null;
-  private busy = false;
+  // Time-based lock instead of a boolean. Even if a tick hangs (impossible
+  // now thanks to per-op timeouts, but be defensive) the lock expires and
+  // the next tick attempts again.
+  private busyUntil = 0;
+  private lastSuccessAt = 0;
+  private staleWarned = false;
   private inFlight = new Set<string>();
+
+  getLastSuccessAt(): number {
+    return this.lastSuccessAt;
+  }
 
   constructor(
     private readonly config: ConfigService,
@@ -64,46 +80,81 @@ export class ExportWatcherService {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      this.logger.info(SOURCE, 'Stopped');
     }
+    // Full state reset — this service is a NestJS singleton, so unless we
+    // wipe these here they'd survive across Stop→Start cycles inside the
+    // same process. `inFlight` in particular could have entries stuck from
+    // a hung transfer, which would then silently skip those files forever.
+    this.inFlight.clear();
+    this.busyUntil = 0;
+    this.lastSuccessAt = 0;
+    this.staleWarned = false;
+    this.logger.info(SOURCE, 'Stopped (state reset)');
   }
 
   private async tick(): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    try {
-      const cfg = this.config.get();
-      if (!fs.existsSync(cfg.exportDirectory)) return;
-
-      // If we lost the SFTP socket between ticks, wait for it to come back.
-      await this.sftp.ensureConnected();
-
-      // Make sure remote inbox exists
-      await this.sftp.ensureDir(REMOTE_TARGET_DIR);
-
-      const processedDir = path.join(cfg.exportDirectory, LOCAL_PROCESSED_SUBDIR);
-      fs.mkdirSync(processedDir, { recursive: true });
-
-      const entries = fs.readdirSync(cfg.exportDirectory, { withFileTypes: true });
-      const now = Date.now();
-      for (const e of entries) {
-        if (!e.isFile()) continue;
-        if (!e.name.toLowerCase().endsWith('.xml')) continue;
-        if (this.inFlight.has(e.name)) continue;
-
-        const localPath = path.join(cfg.exportDirectory, e.name);
-        const stat = fs.statSync(localPath);
-        if (now - stat.mtimeMs < STABLE_MS) continue; // still being written
-
-        this.inFlight.add(e.name);
-        try {
-          await this.transferOne(localPath, e.name, processedDir);
-        } finally {
-          this.inFlight.delete(e.name);
-        }
+    const now = Date.now();
+    if (now < this.busyUntil) {
+      // Previous tick still in flight — skip. But if the previous tick
+      // has been "in flight" for way too long, warn once so we notice.
+      if (this.lastSuccessAt > 0 && now - this.lastSuccessAt > STALE_TICK_WARN_MS && !this.staleWarned) {
+        this.logger.warn(SOURCE, `No successful tick for ${Math.floor((now - this.lastSuccessAt) / 1000)}s`);
+        this.staleWarned = true;
       }
+      return;
+    }
+    this.busyUntil = now + TICK_TIMEOUT_MS;
+
+    // Race the actual work against a hard timeout so a hung SFTP call can
+    // never lock us out permanently.
+    let watchdog: NodeJS.Timeout;
+    const timeout = new Promise<never>((_, reject) => {
+      watchdog = setTimeout(() => reject(new Error('tick timed out')), TICK_TIMEOUT_MS);
+    });
+
+    try {
+      await Promise.race([this.doTick(), timeout]);
+      this.lastSuccessAt = Date.now();
+      this.staleWarned = false;
+    } catch (err) {
+      const msg = (err as Error).message;
+      this.logger.warn(SOURCE, `tick aborted: ${msg}`);
     } finally {
-      this.busy = false;
+      clearTimeout(watchdog!);
+      this.busyUntil = 0;
+    }
+  }
+
+  private async doTick(): Promise<void> {
+    const cfg = this.config.get();
+    if (!fs.existsSync(cfg.exportDirectory)) return;
+
+    // If we lost the SFTP socket between ticks, wait for it to come back.
+    await this.sftp.ensureConnected();
+
+    // Make sure remote inbox exists
+    await this.sftp.ensureDir(REMOTE_TARGET_DIR);
+
+    const processedDir = path.join(cfg.exportDirectory, LOCAL_PROCESSED_SUBDIR);
+    fs.mkdirSync(processedDir, { recursive: true });
+
+    const entries = fs.readdirSync(cfg.exportDirectory, { withFileTypes: true });
+    const now = Date.now();
+    for (const e of entries) {
+      if (!e.isFile()) continue;
+      if (!e.name.toLowerCase().endsWith('.xml')) continue;
+      if (this.inFlight.has(e.name)) continue;
+
+      const localPath = path.join(cfg.exportDirectory, e.name);
+      const stat = fs.statSync(localPath);
+      if (now - stat.mtimeMs < STABLE_MS) continue; // still being written
+
+      this.inFlight.add(e.name);
+      try {
+        await this.transferOne(localPath, e.name, processedDir);
+      } finally {
+        this.inFlight.delete(e.name);
+      }
     }
   }
 

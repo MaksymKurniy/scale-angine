@@ -3,127 +3,101 @@
   <tafs>
 
     <taf mode="read">
-      <sequence_no>1500</sequence_no>
+      <sequence_no>1700</sequence_no>
       <booking_department_no>1</booking_department_no>
       <device_no>1</device_no>
-      <receipt_no>95</receipt_no>
-      <receipt_date>2026-02-14T16:40:00</receipt_date>
+      <receipt_no>97</receipt_no>
+      <receipt_date>2026-07-19T18:00:00</receipt_date>
       <position_no>1</position_no>
       <void_state>0</void_state>
 
       <taf_registration>
         <department_no>1</department_no>
-        <plu_no>7766</plu_no>
-        <plu_type>1</plu_type>
-        <name>The Multi-location Snowboard</name>
-        <article_group_no>12</article_group_no>
-        <weight>1000</weight>
+        <plu_no>2606</plu_no>
+        <plu_type>0</plu_type>
+        <name>Wurst&amp;Käse-Salat TEST</name>
+        <article_group_no>1</article_group_no>
+        <weight>500</weight>
         <decimal_places_weight>3</decimal_places_weight>
         <weightunit_type>1</weightunit_type>
-        <item_baseprice>1</item_baseprice>
-        <amount>1</amount>
-        <price_to_pay>1</price_to_pay>
+        <item_baseprice>1280</item_baseprice>
+        <amount>640</amount>
+        <price_to_pay>640</price_to_pay>
+        <vat_no>1</vat_no>
+        <vat_value>45</vat_value>
+      </taf_registration>
+    </taf>
+
+    <taf mode="read">
+      <sequence_no>1701</sequence_no>
+      <booking_department_no>1</booking_department_no>
+      <device_no>1</device_no>
+      <receipt_no>97</receipt_no>
+      <receipt_date>2026-07-19T18:00:00</receipt_date>
+      <position_no>2</position_no>
+      <void_state>0</void_state>
+
+      <taf_registration>
+        <department_no>1</department_no>
+        <plu_no>1275</plu_no>
+        <plu_type>0</plu_type>
+        <name>Parmesan TEST 50 g</name>
+        <article_group_no>11</article_group_no>
+        <weight>50</weight>
+        <decimal_places_weight>3</decimal_places_weight>
+        <weightunit_type>1</weightunit_type>
+        <item_baseprice>125</item_baseprice>
+        <amount>6</amount>
+        <price_to_pay>6</price_to_pay>
         <vat_no>1</vat_no>
         <vat_value>0</vat_value>
       </taf_registration>
     </taf>
 
     <taf mode="read">
-      <sequence_no>1501</sequence_no>
+      <sequence_no>1702</sequence_no>
       <booking_department_no>1</booking_department_no>
       <device_no>1</device_no>
-      <receipt_no>95</receipt_no>
-      <receipt_date>2026-02-14T16:40:00</receipt_date>
-      <position_no>2</position_no>
-      <void_state>0</void_state>
-
-      <taf_registration>
-        <department_no>1</department_no>
-        <plu_no>9944</plu_no>
-        <plu_type>1</plu_type>
-        <name>The 3p Fulfilled Snowboard</name>
-        <article_group_no>11</article_group_no>
-        <weight>500</weight>
-        <decimal_places_weight>3</decimal_places_weight>
-        <weightunit_type>1</weightunit_type>
-        <item_baseprice>25</item_baseprice>
-        <amount>12</amount>
-        <price_to_pay>12</price_to_pay>
-        <vat_no>1</vat_no>
-        <vat_value>1</vat_value>
-      </taf_registration>
-    </taf>
-
-    <taf mode="read">
-      <sequence_no>1502</sequence_no>
-      <booking_department_no>1</booking_department_no>
-      <device_no>1</device_no>
-      <receipt_no>95</receipt_no>
-      <receipt_date>2026-02-14T16:40:00</receipt_date>
+      <receipt_no>97</receipt_no>
+      <receipt_date>2026-07-19T18:00:00</receipt_date>
       <position_no>3</position_no>
       <void_state>0</void_state>
 
       <taf_registration>
         <department_no>1</department_no>
-        <plu_no>2221</plu_no>
-        <plu_type>1</plu_type>
-        <name>The Multi-managed Snowboard</name>
-        <article_group_no>10</article_group_no>
-        <weight>300</weight>
+        <plu_no>1666</plu_no>
+        <plu_type>0</plu_type>
+        <name>Parmesan TEST 100 g</name>
+        <article_group_no>1</article_group_no>
+        <weight>100</weight>
         <decimal_places_weight>3</decimal_places_weight>
         <weightunit_type>1</weightunit_type>
-        <item_baseprice>690</item_baseprice>
-        <amount>207</amount>
-        <price_to_pay>207</price_to_pay>
+        <item_baseprice>250</item_baseprice>
+        <amount>25</amount>
+        <price_to_pay>25</price_to_pay>
         <vat_no>1</vat_no>
-        <vat_value>14</vat_value>
+        <vat_value>2</vat_value>
       </taf_registration>
     </taf>
 
     <taf mode="read">
-      <sequence_no>1503</sequence_no>
+      <sequence_no>1750</sequence_no>
       <booking_department_no>1</booking_department_no>
       <device_no>1</device_no>
-      <receipt_no>95</receipt_no>
-      <receipt_date>2026-02-14T16:40:00</receipt_date>
+      <receipt_no>97</receipt_no>
+      <receipt_date>2026-07-19T18:00:00</receipt_date>
       <position_no>4</position_no>
-      <void_state>0</void_state>
-
-      <taf_registration>
-        <department_no>1</department_no>
-        <plu_no>1100</plu_no>
-        <plu_type>1</plu_type>
-        <name>The Collection Snowboard: Liquid</name>
-        <article_group_no>33</article_group_no>
-        <weight>400</weight>
-        <decimal_places_weight>3</decimal_places_weight>
-        <weightunit_type>1</weightunit_type>
-        <item_baseprice>230</item_baseprice>
-        <amount>92</amount>
-        <price_to_pay>92</price_to_pay>
-        <vat_no>1</vat_no>
-        <vat_value>6</vat_value>
-      </taf_registration>
-    </taf>
-
-    <taf mode="read">
-      <sequence_no>1550</sequence_no>
-      <booking_department_no>1</booking_department_no>
-      <device_no>1</device_no>
-      <receipt_no>95</receipt_no>
-      <receipt_date>2026-02-14T16:40:00</receipt_date>
-      <position_no>5</position_no>
 
       <taf_total>
-        <weight>2200</weight>
+        <weight>650</weight>
         <decimal_places_weight>3</decimal_places_weight>
         <weightunit_type>1</weightunit_type>
-        <amount>312</amount>
-        <price_to_pay>312</price_to_pay>
-        <number_of_items>4</number_of_items>
-        <number_of_positions>4</number_of_positions>
-        <total_ean>2000000000095</total_ean>
-        <money_given>312</money_given>
+        <amount>671</amount>
+        <price_to_pay>671</price_to_pay>
+        <number_of_items>3</number_of_items>
+        <number_of_positions>3</number_of_positions>
+        <total_ean>2000000000098</total_ean>
+        <money_given>671</money_given>
         <money_changed>0</money_changed>
       </taf_total>
     </taf>

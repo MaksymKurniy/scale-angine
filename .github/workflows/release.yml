@@ -47,7 +47,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: scale-angine-${{ matrix.os }}
+          name: scale-engine-${{ matrix.os }}
           path: |
             release/*.exe
             release/*.dmg

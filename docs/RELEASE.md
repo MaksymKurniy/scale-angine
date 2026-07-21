@@ -13,10 +13,10 @@ git add .
 git commit -m "chore: initial commit"
 
 # Create a private repo on GitHub via gh CLI or web UI. With gh:
-gh repo create scale-angine --private --source=. --remote=origin --push
+gh repo create scale-engine --private --source=. --remote=origin --push
 
 # Or, after creating via web:
-git remote add origin git@github.com:<your-account>/scale-angine.git
+git remote add origin git@github.com:<your-account>/scale-engine.git
 git branch -M main
 git push -u origin main
 ```
@@ -37,7 +37,7 @@ GitHub Actions are wired up out of the box (`.github/workflows/`):
    git push origin main --tags
    ```
 4. Watch the Actions tab on GitHub. After ~5-10 minutes, the release will appear under **Releases** with attached `.exe` and `.dmg`.
-5. Send the `Scale-Angine-Setup-1.0.1.exe` URL to the client, along with `docs/CLIENT-GUIDE.md` if they're new.
+5. Send the `Scale-Engine-Setup-1.0.1.exe` URL to the client, along with `docs/CLIENT-GUIDE.md` if they're new.
 
 ## Building locally
 
@@ -45,7 +45,7 @@ GitHub Actions are wired up out of the box (`.github/workflows/`):
 
 ```bash
 npm install
-npm run dist:mac          # creates release/Scale-Angine-1.0.0-arm64.dmg + -x64.dmg
+npm run dist:mac          # creates release/Scale-Engine-1.0.0-arm64.dmg + -x64.dmg
 ```
 
 ### Windows .exe from macOS
@@ -54,7 +54,7 @@ Cross-building Windows installers from macOS needs Wine:
 
 ```bash
 brew install --cask wine-stable
-npm run dist:win          # creates release/Scale-Angine-Setup-1.0.0.exe
+npm run dist:win          # creates release/Scale-Engine-Setup-1.0.0.exe
 ```
 
 If Wine is missing or fails, use the GitHub Actions path instead — it always works because it builds on a real Windows runner.

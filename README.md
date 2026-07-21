@@ -1,4 +1,4 @@
-# Scale Angine
+# Scale Engine
 
 > Documentation map: this README is the technical/developer overview.
 > See [`docs/CLIENT-GUIDE.md`](docs/CLIENT-GUIDE.md) for an end-user guide and
@@ -6,8 +6,8 @@
 
 Proxy gateway between **Mettler Toledo** scales and an **SFTP** server. Sits on the cashier/back-office PC, watches two directories in parallel, and shuttles XML files in both directions:
 
-- **Export → SFTP**: when the scale drops a receipt XML into the local *Export* directory, Scale Angine uploads it to **`/upload/import`** on the SFTP server (the middleware's shared inbox; it then moves files to `/upload/import_processed` or `/upload/import_error` on its own). The local copy is archived under `<Export>/processed`.
-- **SFTP → Import**: when the POS App publishes a product XML into **`/upload/<FolderName>/export/`** on the SFTP server, Scale Angine downloads it into the local *Import* directory (where Mettler Toledo picks it up) and moves the remote file to `/upload/<FolderName>/export/processed`.
+- **Export → SFTP**: when the scale drops a receipt XML into the local *Export* directory, Scale Engine uploads it to **`/upload/import`** on the SFTP server (the middleware's shared inbox; it then moves files to `/upload/import_processed` or `/upload/import_error` on its own). The local copy is archived under `<Export>/processed`.
+- **SFTP → Import**: when the POS App publishes a product XML into **`/upload/<FolderName>/export/`** on the SFTP server, Scale Engine downloads it into the local *Import* directory (where Mettler Toledo picks it up) and moves the remote file to `/upload/<FolderName>/export/processed`.
 
 ## Stack
 
@@ -41,14 +41,14 @@ npm start
 
 ## Configuration
 
-All four fields are stored as JSON in Electron's per-user `userData` folder (`scale-angine-config.json`):
+All four fields are stored as JSON in Electron's per-user `userData` folder (`scale-engine-config.json`):
 
 | Field            | Purpose                                                                                        |
 |------------------|------------------------------------------------------------------------------------------------|
 | SFTP URL         | `sftp://user:pass@host:22` (port optional, defaults to 22)                                     |
 | Folder Name      | Sub-folder under `/upload/` assigned to this scale (e.g. `DIsaH6`)                             |
-| Import directory | Local folder Mettler Toledo reads product XMLs from. Scale Angine writes here.                 |
-| Export directory | Local folder Mettler Toledo writes receipt XMLs to. Scale Angine reads here.                   |
+| Import directory | Local folder Mettler Toledo reads product XMLs from. Scale Engine writes here.                 |
+| Export directory | Local folder Mettler Toledo writes receipt XMLs to. Scale Engine reads here.                   |
 
 Three buttons control the agent:
 
@@ -67,8 +67,8 @@ Three buttons control the agent:
 ## Packaging
 
 `electron-builder` is configured to produce:
-- **Windows**: NSIS installer (`Scale-Angine-Setup-<version>.exe`, x64)
-- **macOS**: DMG (`Scale-Angine-<version>-<arch>.dmg`, arm64 + x64)
+- **Windows**: NSIS installer (`Scale-Engine-Setup-<version>.exe`, x64)
+- **macOS**: DMG (`Scale-Engine-<version>-<arch>.dmg`, arm64 + x64)
 - **Linux**: AppImage (best-effort fallback)
 
 ```bash

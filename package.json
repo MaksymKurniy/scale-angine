@@ -1,7 +1,7 @@
 {
-  "name": "scale-angine",
-  "version": "1.0.0",
-  "description": "Scale Angine — proxy gateway between Mettler Toledo scales and SFTP server for XML receipts and product files.",
+  "name": "scale-engine",
+  "version": "1.1.0",
+  "description": "Scale Engine — proxy gateway between Mettler Toledo scales and SFTP server for XML receipts and product files.",
   "main": "dist/main/main.js",
   "author": {
     "name": "Mykhailo",
@@ -38,8 +38,8 @@
     "typescript": "^5.5.3"
   },
   "build": {
-    "appId": "com.basex.scale-angine",
-    "productName": "Scale Angine",
+    "appId": "com.basex.scale-engine",
+    "productName": "Scale Engine",
     "copyright": "Copyright © 2026 Base-X Tech",
     "directories": {
       "output": "release",
@@ -62,7 +62,7 @@
           "arch": ["x64"]
         }
       ],
-      "artifactName": "Scale-Angine-Setup-${version}.${ext}"
+      "artifactName": "Scale-Engine-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -70,7 +70,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Scale Angine"
+      "shortcutName": "Scale Engine"
     },
     "mac": {
       "category": "public.app-category.utilities",
@@ -80,7 +80,7 @@
           "arch": ["arm64", "x64"]
         }
       ],
-      "artifactName": "Scale-Angine-${version}-${arch}.${ext}"
+      "artifactName": "Scale-Engine-${version}-${arch}.${ext}"
     },
     "linux": {
       "target": ["AppImage"],

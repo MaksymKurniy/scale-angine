@@ -11,6 +11,17 @@ export interface SftpConnectOptions {
 
 const RECONNECT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
 const READY_TIMEOUT_MS = 15_000;
+// Keepalive is critical for long-running deployments. NAT/firewalls silently
+// drop idle SSH tunnels after a few minutes; without keepalive we never
+// notice because ssh2 doesn't proactively check the socket. With these
+// settings we send a keepalive probe every 20 s and treat the connection
+// as dead after 3 missed replies (~60 s), which triggers our auto-reconnect.
+const KEEPALIVE_INTERVAL_MS = 20_000;
+const KEEPALIVE_COUNT_MAX = 3;
+// Any single SFTP operation that takes longer than this is treated as a
+// zombie call (typically a dead socket). We reject with a timeout error so
+// the tick can unwind, mark the connection dead and reconnect.
+const OP_TIMEOUT_MS = 30_000;
 
 /**
  * Thin wrapper around ssh2-sftp-client.
@@ -139,14 +150,19 @@ export class SftpService {
   /**
    * Open (or reopen) the SFTP connection. Remembers the URI+password so that
    * subsequent drops trigger automatic reconnection.
+   *
+   * @param force  When true, unconditionally tear down any existing client
+   *               and rebuild. Use this from user-initiated Start actions —
+   *               a zombie client (thinks it's connected but socket is dead)
+   *               can otherwise short-circuit the reconnect.
    */
-  async connect(uri: string, passwordOverride?: string): Promise<void> {
+  async connect(uri: string, passwordOverride?: string, force: boolean = false): Promise<void> {
     const cacheKey = `${uri} ${passwordOverride ?? ''}`;
     this.wantedUri = uri;
     this.wantedPassword = passwordOverride ?? '';
     this.cancelReconnect();
 
-    if (this.connected && this.connectedUri === cacheKey && this.client) return;
+    if (!force && this.connected && this.connectedUri === cacheKey && this.client) return;
 
     await this.closeClient();
     await this.openClient(cacheKey);
@@ -206,6 +222,11 @@ export class SftpService {
         username: opts.username,
         password: opts.password,
         readyTimeout: READY_TIMEOUT_MS,
+        // ssh2 transport keepalive: sends SSH2_MSG_GLOBAL_REQUEST every
+        // KEEPALIVE_INTERVAL_MS and errors out after KEEPALIVE_COUNT_MAX
+        // missed replies. Without this, a dead NAT tunnel looks alive to us.
+        keepaliveInterval: KEEPALIVE_INTERVAL_MS,
+        keepaliveCountMax: KEEPALIVE_COUNT_MAX,
       });
 
       this.client = client;
@@ -267,12 +288,38 @@ export class SftpService {
     this.reconnectAttempt = 0;
   }
 
+  /**
+   * Aggressive teardown. `ssh2.end()` awaits the underlying stream's 'close'
+   * event, which can (rarely) hang on a half-open TCP socket. We give it 5s
+   * and then null the reference regardless — the OS will GC the socket, and
+   * pretending to still hold the reference just leads to zombie state.
+   */
   private async closeClient(): Promise<void> {
-    if (this.client) {
-      try { await this.client.end(); } catch { /* ignore */ }
+    if (!this.client) {
+      this.connected = false;
+      return;
     }
+    const c = this.client;
+    // Detach right away so any concurrent handleDrop / event handlers can't
+    // touch this instance's fields via the stale reference.
     this.client = null;
     this.connected = false;
+    try {
+      await Promise.race([
+        c.end(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('close timeout')), 5_000)),
+      ]);
+    } catch (err) {
+      this.logger.warn('SftpService', `Force-closing stale client (${(err as Error).message})`);
+      // As a last resort try the underlying stream, if we can reach it.
+      try {
+        // ssh2-sftp-client exposes the inner ssh2 Client as `.client` in some
+        // versions and via `_client` in others. Both are best-effort.
+        const inner = (c as any).client || (c as any)._client;
+        if (inner && typeof inner.end === 'function') inner.end();
+        if (inner && typeof inner.destroy === 'function') inner.destroy();
+      } catch { /* ignore */ }
+    }
   }
 
   private async waitFor(cond: () => boolean, timeoutMs: number): Promise<void> {
@@ -289,11 +336,30 @@ export class SftpService {
     return this.client;
   }
 
+  /**
+   * Race a promise against a timer. On timeout we also *forcefully* mark the
+   * connection dead, which triggers our auto-reconnect flow. This is the
+   * safety net against silently-dead sockets — the underlying ssh2 promise
+   * may never resolve, but we unwind the tick and start reconnecting.
+   */
+  private withTimeout<T>(op: string, promise: Promise<T>, ms: number = OP_TIMEOUT_MS): Promise<T> {
+    let timer: NodeJS.Timeout;
+    const timeout = new Promise<T>((_, reject) => {
+      timer = setTimeout(() => {
+        this.logger.warn('SftpService', `Operation timed out after ${ms} ms: ${op}`);
+        // Force-close the stale client. handleDrop() will schedule reconnect.
+        this.handleDrop(`timeout on ${op}`);
+        reject(new Error(`SFTP operation timed out: ${op}`));
+      }, ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer!)) as Promise<T>;
+  }
+
   async ensureDir(remotePath: string): Promise<void> {
     const c = this.ensure();
-    const exists = await c.exists(remotePath);
+    const exists = await this.withTimeout(`exists ${remotePath}`, c.exists(remotePath));
     if (!exists) {
-      await c.mkdir(remotePath, true);
+      await this.withTimeout(`mkdir ${remotePath}`, c.mkdir(remotePath, true));
     } else if (exists !== 'd') {
       throw new Error(`Remote path exists but is not a directory: ${remotePath}`);
     }
@@ -301,9 +367,9 @@ export class SftpService {
 
   async listXmlFiles(remoteDir: string): Promise<{ name: string; size: number; modifyTime: number }[]> {
     const c = this.ensure();
-    const exists = await c.exists(remoteDir);
+    const exists = await this.withTimeout(`exists ${remoteDir}`, c.exists(remoteDir));
     if (!exists) return [];
-    const items = await c.list(remoteDir);
+    const items = await this.withTimeout(`list ${remoteDir}`, c.list(remoteDir));
     return items
       .filter((it) => it.type === '-' && it.name.toLowerCase().endsWith('.xml'))
       .map((it) => ({ name: it.name, size: it.size, modifyTime: it.modifyTime }));
@@ -311,22 +377,25 @@ export class SftpService {
 
   async uploadFile(localPath: string, remotePath: string): Promise<void> {
     const c = this.ensure();
-    await c.put(localPath, remotePath);
+    // Uploads can legitimately take longer than a list; give them 2× the
+    // default. A 10 KB XML that takes 60 s to upload means the tunnel is
+    // hopelessly slow and reconnecting is the right call anyway.
+    await this.withTimeout(`put ${remotePath}`, c.put(localPath, remotePath), OP_TIMEOUT_MS * 2);
   }
 
   async downloadFile(remotePath: string, localPath: string): Promise<void> {
     const c = this.ensure();
-    await c.fastGet(remotePath, localPath);
+    await this.withTimeout(`get ${remotePath}`, c.fastGet(remotePath, localPath), OP_TIMEOUT_MS * 2);
   }
 
   async moveRemote(src: string, dst: string): Promise<void> {
     const c = this.ensure();
-    await c.rename(src, dst);
+    await this.withTimeout(`rename ${src} -> ${dst}`, c.rename(src, dst));
   }
 
   async remoteExists(remotePath: string): Promise<boolean> {
     const c = this.ensure();
-    const r = await c.exists(remotePath);
+    const r = await this.withTimeout(`exists ${remotePath}`, c.exists(remotePath));
     return Boolean(r);
   }
 }

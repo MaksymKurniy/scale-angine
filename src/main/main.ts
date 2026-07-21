@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog } from 'electron';
+import * as fs from 'fs';
 import * as path from 'path';
 import { bootstrapNest, NestContext } from './nest/bootstrap';
 import { registerIpc } from './ipc';
@@ -23,7 +24,7 @@ function createWindow(): BrowserWindow {
     height: 820,
     minWidth: 520,
     minHeight: 640,
-    title: 'Scale Angine',
+    title: 'Scale Engine',
     autoHideMenuBar: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -46,7 +47,7 @@ function createWindow(): BrowserWindow {
       buttons: ['Cancel', 'Stop & Quit'],
       defaultId: 0,
       cancelId: 0,
-      title: 'Scale Angine is running',
+      title: 'Scale Engine is running',
       message: 'The agent is currently transferring files.',
       detail: 'Quitting now will stop the SFTP session. Continue?',
     });
@@ -62,9 +63,39 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
+/**
+ * One-off migration from the pre-1.1 productName ("Scale Angine") to the
+ * new one ("Scale Engine"). Electron builds userData path from productName,
+ * so on the rename Electron would otherwise hand us a fresh empty folder
+ * and the client would lose their four config fields.
+ *
+ * We look for a config in the old sibling folder and copy it over on
+ * first run of the new build. Safe to leave in perpetuity — it's a no-op
+ * after the first successful migration.
+ */
+function migrateLegacyUserData(newUserDataDir: string): void {
+  const parent = path.dirname(newUserDataDir);
+  const legacyDir = path.join(parent, 'Scale Angine');
+  const newConfigPath = path.join(newUserDataDir, 'scale-angine-config.json');
+  const legacyConfigPath = path.join(legacyDir, 'scale-angine-config.json');
+  try {
+    if (fs.existsSync(newConfigPath)) return; // already migrated or fresh install
+    if (!fs.existsSync(legacyConfigPath)) return; // nothing to migrate
+    fs.mkdirSync(newUserDataDir, { recursive: true });
+    fs.copyFileSync(legacyConfigPath, newConfigPath);
+    console.log(`[migration] copied config from "${legacyConfigPath}" to "${newConfigPath}"`);
+  } catch (err) {
+    console.warn(`[migration] userData migration failed (non-fatal): ${(err as Error).message}`);
+  }
+}
+
 async function init() {
-  // Place config file inside Electron's per-user data dir
-  const configFilePath = path.join(app.getPath('userData'), 'scale-angine-config.json');
+  const userDataDir = app.getPath('userData');
+  migrateLegacyUserData(userDataDir);
+
+  // Config filename kept as `scale-angine-config.json` (not renamed) so
+  // that the migrated legacy file is picked up transparently.
+  const configFilePath = path.join(userDataDir, 'scale-angine-config.json');
   nestCtx = await bootstrapNest(configFilePath);
 
   mainWindow = createWindow();
@@ -72,7 +103,7 @@ async function init() {
 }
 
 app.whenReady().then(init).catch((err) => {
-  console.error('Failed to init Scale Angine:', err);
+  console.error('Failed to init Scale Engine:', err);
   app.quit();
 });
 

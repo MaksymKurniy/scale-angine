@@ -13,6 +13,8 @@ const STABLE_MS = 1500;
 // perspective but is effectively our INBOX for the scale.
 const REMOTE_EXPORT_SUBDIR = 'export';
 const REMOTE_PROCESSED_SUBDIR = 'processed';
+const TICK_TIMEOUT_MS = 90_000;
+const STALE_TICK_WARN_MS = 5 * 60_000;
 
 /**
  * Watches the SFTP /upload/<FolderName>/export/ directory for new product XML
@@ -25,8 +27,14 @@ const REMOTE_PROCESSED_SUBDIR = 'processed';
 @Injectable()
 export class ImportWatcherService {
   private timer: NodeJS.Timeout | null = null;
-  private busy = false;
+  private busyUntil = 0;
+  private lastSuccessAt = 0;
+  private staleWarned = false;
   private inFlight = new Set<string>();
+
+  getLastSuccessAt(): number {
+    return this.lastSuccessAt;
+  }
 
   constructor(
     private readonly config: ConfigService,
@@ -63,8 +71,13 @@ export class ImportWatcherService {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      this.logger.info(SOURCE, 'Stopped');
     }
+    // Full state reset — see ExportWatcherService.stop() for rationale.
+    this.inFlight.clear();
+    this.busyUntil = 0;
+    this.lastSuccessAt = 0;
+    this.staleWarned = false;
+    this.logger.info(SOURCE, 'Stopped (state reset)');
   }
 
   private remoteDir(): string {
@@ -77,36 +90,59 @@ export class ImportWatcherService {
   }
 
   private async tick(): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    try {
-      const cfg = this.config.get();
-      const remoteDir = this.remoteDir();
-      const processedRemote = this.remoteProcessedDir();
-
-      // If we lost the SFTP socket between ticks, wait for it to come back.
-      await this.sftp.ensureConnected();
-
-      // Ensure both remote dir and remote processed dir exist
-      await this.sftp.ensureDir(remoteDir);
-      await this.sftp.ensureDir(processedRemote);
-
-      const files = await this.sftp.listXmlFiles(remoteDir);
-      const now = Date.now();
-      for (const f of files) {
-        if (this.inFlight.has(f.name)) continue;
-        // f.modifyTime is in ms since epoch (per ssh2-sftp-client)
-        if (now - f.modifyTime < STABLE_MS) continue;
-
-        this.inFlight.add(f.name);
-        try {
-          await this.transferOne(f.name, remoteDir, processedRemote, cfg.importDirectory);
-        } finally {
-          this.inFlight.delete(f.name);
-        }
+    const now = Date.now();
+    if (now < this.busyUntil) {
+      if (this.lastSuccessAt > 0 && now - this.lastSuccessAt > STALE_TICK_WARN_MS && !this.staleWarned) {
+        this.logger.warn(SOURCE, `No successful tick for ${Math.floor((now - this.lastSuccessAt) / 1000)}s`);
+        this.staleWarned = true;
       }
+      return;
+    }
+    this.busyUntil = now + TICK_TIMEOUT_MS;
+
+    let watchdog: NodeJS.Timeout;
+    const timeout = new Promise<never>((_, reject) => {
+      watchdog = setTimeout(() => reject(new Error('tick timed out')), TICK_TIMEOUT_MS);
+    });
+
+    try {
+      await Promise.race([this.doTick(), timeout]);
+      this.lastSuccessAt = Date.now();
+      this.staleWarned = false;
+    } catch (err) {
+      const msg = (err as Error).message;
+      this.logger.warn(SOURCE, `tick aborted: ${msg}`);
     } finally {
-      this.busy = false;
+      clearTimeout(watchdog!);
+      this.busyUntil = 0;
+    }
+  }
+
+  private async doTick(): Promise<void> {
+    const cfg = this.config.get();
+    const remoteDir = this.remoteDir();
+    const processedRemote = this.remoteProcessedDir();
+
+    // If we lost the SFTP socket between ticks, wait for it to come back.
+    await this.sftp.ensureConnected();
+
+    // Ensure both remote dir and remote processed dir exist
+    await this.sftp.ensureDir(remoteDir);
+    await this.sftp.ensureDir(processedRemote);
+
+    const files = await this.sftp.listXmlFiles(remoteDir);
+    const now = Date.now();
+    for (const f of files) {
+      if (this.inFlight.has(f.name)) continue;
+      // f.modifyTime is in ms since epoch (per ssh2-sftp-client)
+      if (now - f.modifyTime < STABLE_MS) continue;
+
+      this.inFlight.add(f.name);
+      try {
+        await this.transferOne(f.name, remoteDir, processedRemote, cfg.importDirectory);
+      } finally {
+        this.inFlight.delete(f.name);
+      }
     }
   }
 

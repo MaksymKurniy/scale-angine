@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import * as dns from 'dns';
 import { EventEmitter } from 'events';
 import { ConfigService } from '../config/config.service';
 import { AgentState } from '../config/config.types';
@@ -11,6 +12,9 @@ const SOURCE = 'Agent';
 
 const HOURLY_RESTART_MS = 60 * 60 * 1000;
 const RESTART_DELAY_MS = 2_000;
+// Emit a "still alive" log every this-many ms so quiet stores don't look
+// like the app has silently died. Also useful for post-incident triage.
+const HEARTBEAT_MS = 5 * 60 * 1000;
 
 /**
  * Orchestrates the full pipeline: validate config → connect SFTP →
@@ -23,6 +27,7 @@ export class AgentService {
 
   private restartTimer: NodeJS.Timeout | null = null;
   private restarting = false;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly config: ConfigService,
@@ -71,7 +76,10 @@ export class AgentService {
     try {
       this.logger.info(SOURCE, 'Starting…');
 
-      await this.sftp.connect(cfg.sftpUri, cfg.sftpPassword);
+      // force=true — user pressed Start, always tear down any lingering
+      // client and rebuild from scratch. Guards against the "zombie
+      // connection" scenario where connected=true but the socket is dead.
+      await this.sftp.connect(cfg.sftpUri, cfg.sftpPassword, true);
 
       this.exportWatcher.start();
       this.importWatcher.start();
@@ -83,8 +91,9 @@ export class AgentService {
       });
 
       this.scheduleHourlyRestart();
+      this.scheduleHeartbeat();
 
-      this.logger.success(SOURCE, 'Scale Angine is running');
+      this.logger.success(SOURCE, 'Scale Engine is running');
 
       return this.getState();
     } catch (err) {
@@ -111,6 +120,7 @@ export class AgentService {
       }
 
       this.clearHourlyRestart();
+      this.clearHeartbeat();
 
       this.setState({ status: 'error', lastError: msg });
 
@@ -126,6 +136,7 @@ export class AgentService {
     this.logger.info(SOURCE, 'Stopping…');
 
     this.clearHourlyRestart();
+    this.clearHeartbeat();
 
     try {
       this.exportWatcher.stop();
@@ -171,6 +182,86 @@ export class AgentService {
     this.restartTimer = null;
   }
 
+  /**
+   * Periodic "I'm alive" log with basic stats. Serves two purposes:
+   *   1. On a quiet store, gives the operator visible evidence the agent is
+   *      still ticking even when no files are flowing.
+   *   2. Doubles as a post-mortem checkpoint — if the log stopped emitting
+   *      at 03:14, we know that's when the process died.
+   */
+  private scheduleHeartbeat(): void {
+    if (this.heartbeatTimer) return;
+    this.heartbeatTimer = setInterval(() => this.emitHeartbeat(), HEARTBEAT_MS);
+    // Also emit one immediately so first evidence appears quickly on Start.
+    this.emitHeartbeat();
+  }
+
+  private clearHeartbeat(): void {
+    if (!this.heartbeatTimer) return;
+    clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+  }
+
+  private emitHeartbeat(): void {
+    if (this.state.status !== 'running') return;
+
+    const startedAt = this.state.startedAt ? new Date(this.state.startedAt).getTime() : Date.now();
+    const uptimeMs = Date.now() - startedAt;
+    const uptime = AgentService.formatDuration(uptimeMs);
+
+    const expLast = this.exportWatcher.getLastSuccessAt();
+    const impLast = this.importWatcher.getLastSuccessAt();
+    const expAgo = expLast ? AgentService.formatDuration(Date.now() - expLast) : 'never';
+    const impAgo = impLast ? AgentService.formatDuration(Date.now() - impLast) : 'never';
+    const connected = this.sftp.isConnected() ? 'connected' : 'DISCONNECTED';
+
+    // Memory footprint — helps spot slow leaks over multi-day runs.
+    const mem = process.memoryUsage();
+    const memStr = `rss=${AgentService.formatBytes(mem.rss)} heap=${AgentService.formatBytes(mem.heapUsed)}`;
+
+    this.logger.info(
+      SOURCE,
+      `heartbeat: up ${uptime}, sftp ${connected}, export tick ${expAgo} ago, import tick ${impAgo} ago, ${memStr}`,
+    );
+
+    // Best-effort DNS check — resolve the SFTP host and log the IP. If Node's
+    // DNS cache goes stale after a network change, we see the wrong IP here
+    // long before the connection fails. Non-blocking; failures are ignored.
+    this.logResolvedIp();
+  }
+
+  private logResolvedIp(): void {
+    try {
+      const cfg = this.config.get();
+      const host = SftpService.parseUri(cfg.sftpUri).host;
+      dns.lookup(host, { all: false }, (err, address) => {
+        if (err) {
+          this.logger.warn(SOURCE, `DNS lookup for ${host} failed: ${err.message}`);
+          return;
+        }
+        this.logger.info(SOURCE, `DNS: ${host} -> ${address}`);
+      });
+    } catch {
+      /* URI probably empty or malformed — skip silently */
+    }
+  }
+
+  private static formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  }
+
+  private static formatDuration(ms: number): string {
+    if (ms < 1_000) return `${ms}ms`;
+    const s = Math.floor(ms / 1_000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m${s % 60}s`;
+    const h = Math.floor(m / 60);
+    return `${h}h${m % 60}m`;
+  }
+
   private async restart(): Promise<void> {
     if (this.restarting) return;
     if (this.state.status !== 'running') return;
@@ -202,7 +293,7 @@ export class AgentService {
 
       const cfg = this.config.get();
 
-      await this.sftp.connect(cfg.sftpUri, cfg.sftpPassword);
+      await this.sftp.connect(cfg.sftpUri, cfg.sftpPassword, true);
 
       this.exportWatcher.start();
       this.importWatcher.start();
